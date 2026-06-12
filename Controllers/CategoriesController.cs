@@ -2,12 +2,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ExpenseTrackerAPI.Data;
 using ExpenseTrackerAPI.Models;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace ExpenseTrackerAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-
+    [Authorize]
     public class CategoriesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -21,7 +23,8 @@ namespace ExpenseTrackerAPI.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Category>>> GetCategories() // IEnumerable - list of collection of categories
         {
-            var categories = await _context.Categories.ToListAsync();
+            var userId = GetUserId();
+            var categories = await _context.Categories.Where(c => c.UserId == userId).ToListAsync();
             return Ok(categories);
 
         }
@@ -30,9 +33,10 @@ namespace ExpenseTrackerAPI.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<Category>> GetCategory(int id)
         {
+
             var category = await _context.Categories.FindAsync(id);
 
-            if (category == null)
+            if (category == null || category.UserId != GetUserId())
             {
                 return NotFound(); 
             }
@@ -44,6 +48,8 @@ namespace ExpenseTrackerAPI.Controllers
         [HttpPost]
         public async Task<ActionResult<Category>> CreateCategory(Category newCategory)
         {
+            // for post we are setting the correct User Id - but also checks if the real user is in the header.
+            newCategory.UserId = GetUserId();
             _context.Categories.Add(newCategory);
             await _context.SaveChangesAsync(); // save chanegs to actual DB
 
@@ -52,14 +58,25 @@ namespace ExpenseTrackerAPI.Controllers
 
         // PUT api/categories/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCategory(int id, Category category)
+        public async Task<IActionResult> UpdateCategory(int id, Category categoryIn)
         {
-            if (id != category.Id) // ID/ Category mismatch 
+            if (id != categoryIn.Id) // ID/ Category mismatch 
             {
                 return BadRequest("ID mismatch between URL and body");
             }
 
-            _context.Entry(category).State = EntityState.Modified;
+            // Get the actual Category from the DB and find its true ID and see if header check
+            // Header is only real thing we use to compare 
+            var category = await _context.Categories.FindAsync(id);
+
+            if (category == null || category.UserId != GetUserId())
+            {
+                return NotFound();
+            }
+
+            //ok because that is all their is to update - Name field 
+            category.Name = categoryIn.Name;
+
             await _context.SaveChangesAsync();
             return NoContent(); //standard for successful update 204
         }
@@ -69,7 +86,7 @@ namespace ExpenseTrackerAPI.Controllers
         {
             var category = await _context.Categories.FindAsync(id);
             
-            if (category == null)
+            if (category == null || category.UserId != GetUserId())
             {
                 return NotFound();
             }
@@ -80,6 +97,11 @@ namespace ExpenseTrackerAPI.Controllers
             return NoContent();
         }
 
+        private int GetUserId()
+        {
+            return int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        }
+         
     }
 
 }
