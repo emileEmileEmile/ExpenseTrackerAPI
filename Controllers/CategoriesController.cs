@@ -4,6 +4,7 @@ using ExpenseTrackerAPI.Data;
 using ExpenseTrackerAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using ExpenseTrackerAPI.DTO;
 
 namespace ExpenseTrackerAPI.Controllers
 {
@@ -21,17 +22,24 @@ namespace ExpenseTrackerAPI.Controllers
 
         // GET api/categories 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Category>>> GetCategories() // IEnumerable - list of collection of categories
+        public async Task<ActionResult<IEnumerable<CategoryResponseDto>>> GetCategories() // IEnumerable - list of collection of categories
         {
             var userId = GetUserId();
             var categories = await _context.Categories.Where(c => c.UserId == userId).ToListAsync();
-            return Ok(categories);
+
+            var response = categories.Select(c => new CategoryResponseDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                UserId = c.UserId
+            });
+            return Ok(response);
 
         }
 
         // GET api/categories/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Category>> GetCategory(int id)
+        public async Task<ActionResult<CategoryResponseDto>> GetCategory(int id)
         {
 
             var category = await _context.Categories.FindAsync(id);
@@ -40,33 +48,51 @@ namespace ExpenseTrackerAPI.Controllers
             {
                 return NotFound(); 
             }
-            return Ok(category);
+
+            var response = new CategoryResponseDto
+            {
+                Id = category.Id,
+                Name = category.Name,
+                UserId = category.UserId
+            };
+
+            return Ok(response);
         }
 
 
         // POST api/categories
         [HttpPost]
-        public async Task<ActionResult<Category>> CreateCategory(Category newCategory)
+        public async Task<ActionResult<CategoryResponseDto>> CreateCategory(CategoryDto input)
         {
             // for post we are setting the correct User Id - but also checks if the real user is in the header.
-            newCategory.UserId = GetUserId();
+            var newCategory = new Category
+            {
+                Name = input.Name,
+                UserId = GetUserId()
+            };
+
             _context.Categories.Add(newCategory);
             await _context.SaveChangesAsync(); // save chanegs to actual DB
 
-            return CreatedAtAction(nameof(GetCategory), new { id = newCategory.Id}, newCategory);
+            var response = new CategoryResponseDto 
+            {
+                Id = newCategory.Id,
+                Name = newCategory.Name,
+                UserId = newCategory.UserId
+            };
+
+            return CreatedAtAction(nameof(GetCategory), new { id = response.Id}, response);
         }
 
         // PUT api/categories/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCategory(int id, Category categoryIn)
+        public async Task<IActionResult> UpdateCategory(int id, CategoryDto categoryIn)
         {
-            if (id != categoryIn.Id) // ID/ Category mismatch 
-            {
-                return BadRequest("ID mismatch between URL and body");
-            }
-
+      
             // Get the actual Category from the DB and find its true ID and see if header check
             // Header is only real thing we use to compare 
+
+            //just create a var from DB and do some check
             var category = await _context.Categories.FindAsync(id);
 
             if (category == null || category.UserId != GetUserId())
@@ -74,6 +100,7 @@ namespace ExpenseTrackerAPI.Controllers
                 return NotFound();
             }
 
+            //checks are done lets create/update the category
             //ok because that is all their is to update - Name field 
             category.Name = categoryIn.Name;
 

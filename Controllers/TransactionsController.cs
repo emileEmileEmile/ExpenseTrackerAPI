@@ -4,6 +4,8 @@ using ExpenseTrackerAPI.Data;
 using ExpenseTrackerAPI.Models;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using ExpenseTrackerAPI.DTO;
+
 
 namespace ExpenseTrackerAPI.Controllers
 {
@@ -24,18 +26,28 @@ namespace ExpenseTrackerAPI.Controllers
 
         // api/transactions 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Transaction>>> GetTransactions()
+        public async Task<ActionResult<IEnumerable<TransactionResponseDto>>> GetTransactions()
         {
             var userId = GetUserId();
 
             var transactions = await _context.Transactions.Where(u => u.UserId == userId).ToListAsync();
-            return Ok(transactions);
+
+            var response = transactions.Select(t => new TransactionResponseDto 
+            {   
+                Id = t.Id,
+                Amount = t.Amount,
+                TransactionType = t.TransactionType,
+                Date = t.Date,
+                UserId = t.UserId,
+                CategoryId = t.CategoryId
+            });
+            return Ok(response);
         }
 
 
         // api/transactions/5
         [HttpGet("{id}")] // get a singular Transaction from the plural transactions table
-        public async Task<ActionResult<Transaction>> GetTransaction(int id)
+        public async Task<ActionResult<TransactionResponseDto>> GetTransaction(int id)
         {
 
             var transaction = await _context.Transactions.FindAsync(id);
@@ -45,39 +57,64 @@ namespace ExpenseTrackerAPI.Controllers
                 return NotFound();
             }
 
-            return Ok(transaction);
+            var response = new TransactionResponseDto 
+            {   
+                Id = transaction.Id,
+                Amount = transaction.Amount,
+                TransactionType = transaction.TransactionType,
+                Date = transaction.Date,
+                UserId = transaction.UserId,
+                CategoryId = transaction.CategoryId
+            };
+
+            return Ok(response);
         }
 
         // api/transactions
         [HttpPost]
-        public async Task<ActionResult<Transaction>> CreateTransaction(Transaction transaction)
+        public async Task<ActionResult<TransactionResponseDto>> CreateTransaction(TransactionDto input)
         {
-            //if (transaction.CategoryId != )
-            var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == transaction.CategoryId && c.UserId == GetUserId());
+            
+            //
+            var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == input.CategoryId && c.UserId == GetUserId());
 
             if (category == null)
             {
                 return BadRequest("Invalid Category");
             }
 
-            transaction.UserId = GetUserId();
+            var transaction = new Transaction 
+            {
+                Amount = input.Amount,
+                TransactionType = input.TransactionType,
+                Date = input.Date,
+                CategoryId = input.CategoryId,
+                UserId = GetUserId()
+            };
+            
             _context.Transactions.Add(transaction); 
 
             await _context.SaveChangesAsync(); //Insert into DB and auto assign ID
 
-            return CreatedAtAction(nameof(GetTransaction), new { id = transaction.Id }, transaction); // Return Route to caller
+            var response = new TransactionResponseDto 
+            {   
+                Id = transaction.Id,
+                Amount = transaction.Amount,
+                TransactionType = transaction.TransactionType,
+                Date = transaction.Date,
+                UserId = transaction.UserId,
+                CategoryId = transaction.CategoryId
+            };
+
+        
+            return CreatedAtAction(nameof(GetTransaction), new { id = response.Id }, response); // Return Route to caller
         }
 
 
         // api/transactions/5
        [HttpPut("{id}")]
-       public async Task<IActionResult> UpdateTransaction(int id, Transaction transactionIn)
+       public async Task<IActionResult> UpdateTransaction(int id, TransactionDto transactionIn)
        {
-            // silly check that front end guy doesnt send wrong id
-            if (id != transactionIn.Id)
-            {
-                return BadRequest();
-            }
 
             var transaction = await _context.Transactions.FindAsync(id);
 
@@ -85,6 +122,7 @@ namespace ExpenseTrackerAPI.Controllers
             {
                 return NotFound();
             }
+
 
             var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == transactionIn.CategoryId && c.UserId == GetUserId());
 
@@ -122,15 +160,7 @@ namespace ExpenseTrackerAPI.Controllers
        private int GetUserId()
        {
             return int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-       }
-
-
-
-
-
-
-
-        
+       }        
 
     }
 
